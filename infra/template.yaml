@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: MotivaFit — Mensagem motivacional fitness no WhatsApp via Meta API (100% gratuito)
+
+Parameters:
+  AdminNumero:
+    Type: String
+    Default: ""
+    Description: "Número admin que pode usar comandos (ex: +5511999887766). Vazio = qualquer um."
+  HorarioCron:
+    Type: String
+    Default: "cron(0 10 * * ? *)"
+    Description: "Horário UTC do envio. 10:00 UTC = 07:00 BRT"
+  MetaVerifyToken:
+    Type: String
+    Description: "Token criado por você para verificar o webhook da Meta (qualquer string)"
+  TemplateName:
+    Type: String
+    Default: "motivafit_mensagem_diaria"
+    Description: "Nome do template aprovado no Meta Business"
+  TemplateLanguage:
+    Type: String
+    Default: "pt_BR"
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 300
+    MemorySize: 256
+    Environment:
+      Variables:
+        DYNAMO_TABLE:          !Ref TabelaMotivaFit
+        PARAM_META_TOKEN:      /motivafit/meta/token
+        PARAM_META_PHONE_ID:   /motivafit/meta/phone_id
+        META_VERIFY_TOKEN:     !Ref MetaVerifyToken
+        ADMIN_NUMERO:          !Ref AdminNumero
+        TEMPLATE_NAME:         !Ref TemplateName
+        TEMPLATE_LANGUAGE:     !Ref TemplateLanguage
+
+Resources:
+
+  # ─── DynamoDB ───────────────────────────────────────────────────────────────
+  TabelaMotivaFit:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: motivafit-dados
+      BillingMode: PAY_PER_REQUEST   # Free Tier: 25 GB + 25 WCU/RCU
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+
+  # ─── Lambda Sender ──────────────────────────────────────────────────────────
+  MotivaFitSender:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MotivaFit-sender
+      CodeUri: lambdas/MotivaFit_sender/
+      Handler: handler.handler
+      Description: Gera e envia mensagem motivacional diária via Meta WhatsApp API
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TabelaMotivaFit
+        - SSMParameterReadPolicy:
+            ParameterName: /motivafit/meta/token
+        - SSMParameterReadPolicy:
+            ParameterName: /motivafit/meta/phone_id
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
+      Events:
+        AgendamentoDiario:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref HorarioCron
+            Name: MotivaFit-envio-diario
+            Description: Dispara o MotivaFit todo dia às 07:00 BRT
+            Enabled: true
+
+  # ─── Lambda Commands ────────────────────────────────────────────────────────
+  MotivaFitCommands:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: motivafit-commands
+      CodeUri: lambdas/motivafit_commands/
+      Handler: handler.handler
+      Description: Processa comandos WhatsApp (!adicionar, !remover, !lista)
+      Environment:
+        Variables:
+          SENDER_LAMBDA_NAME: !Ref MotivaFitSender
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TabelaMotivaFit
+        - SSMParameterReadPolicy:
+            ParameterName: /motivafit/meta/token
+        - SSMParameterReadPolicy:
+            ParameterName: /motivafit/meta/phone_id
+        - LambdaInvokePolicy:
+            FunctionName: !Ref MotivaFitSender
+      Events:
+        WebhookMeta:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: any        # GET (verificação) + POST (mensagens)
+            RestApiId: !Ref ApiGatewayMotivaFit
+
+  # ─── API Gateway ────────────────────────────────────────────────────────────
+  ApiGatewayMotivaFit:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: motivafit-api
+      StageName: prod
+      Description: Webhook para receber mensagens da Meta WhatsApp API
+
+Outputs:
+  WebhookUrl:
+    Description: "URL do webhook — configure no Meta for Developers"
+    Value: !Sub "https://${ApiGatewayMotivaFit}.execute-api.${AWS::Region}.amazonaws.com/prod/webhook"
+  TabelaDynamoDB:
+    Description: "Nome da tabela DynamoDB"
+    Value: !Ref TabelaMotivaFit
+  LambdaSender:
+    Description: "ARN da Lambda de envio"
+    Value: !GetAtt MotivaFitSender.Arn
