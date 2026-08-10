@@ -42,6 +42,7 @@ A Meta oferece **1.000 conversas gratuitas por mês**. Para 100 pessoas recebend
 ```
 fitbot-meta/
 ├── deploy.sh                    # Script de deploy — edite só este
+├── .env.example                 # Exemplo de variáveis sem segredos
 ├── README.md
 ├── lambdas/
 │   ├── requirements.txt         # boto3 + requests (sem Twilio)
@@ -83,17 +84,17 @@ fitbot-meta/
    - Corpo: `{{1}}`  ← a mensagem gerada pela IA vai aqui
 4. Envie para aprovação (normalmente aprovado em minutos)
 
-### 4. Configurar o deploy.sh
+### 4. Configurar variáveis de ambiente
 
-Edite o arquivo `deploy.sh` e preencha:
+Copie `.env.example` para `.env` e preencha os valores reais apenas localmente.
 
 ```bash
-ADMIN_NUMERO="+5511999887766"        # Seu número pessoal (gerencia o bot)
-META_VERIFY_TOKEN="sua-string-secreta"
-META_TOKEN="EAAxxxxxxxxxx"           # Token de acesso permanente
-META_PHONE_ID="123456789"            # Phone Number ID
-META_APP_SECRET="xxxxxxxxxx"         # App Secret
+cp .env.example .env
 ```
+
+Depois ajuste `ADMIN_NUMERO`, `META_VERIFY_TOKEN`, `META_TOKEN`, `META_PHONE_ID` e `META_APP_SECRET` no arquivo `.env`.
+
+O `deploy.sh` lê essas variáveis automaticamente.
 
 ### 5. Executar o deploy
 
@@ -155,7 +156,7 @@ aws logs tail /aws/lambda/fitbot-commands --follow
 
 ```bash
 aws cloudformation delete-stack --stack-name fitbot-stack --region us-east-1
-aws ssm delete-parameter --name /fitbot/meta/token
-aws ssm delete-parameter --name /fitbot/meta/phone_id
-aws ssm delete-parameter --name /fitbot/meta/app_secret
+aws ssm delete-parameter --name /motivafit/meta/token
+aws ssm delete-parameter --name /motivafit/meta/phone_id
+aws ssm delete-parameter --name /motivafit/meta/app_secret
 ```
