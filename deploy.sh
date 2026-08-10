@@ -4,36 +4,42 @@
 
 set -e
 
+if [ -f .env ]; then
+    set -a
+    . ./.env
+    set +a
+fi
+
 echo "========================================"
 echo "  FitBot — Deploy com Meta WhatsApp API"
 echo "========================================"
 
 # ─── Configure estes valores antes de executar ───────────────────────────────
 
-AWS_REGION="sa-east-1"
-STACK_NAME="fitbot-stack"
+AWS_REGION="${AWS_REGION:-sa-east-1}"
+STACK_NAME="${STACK_NAME:-fitbot-stack}"
 
 # Número admin (quem pode usar os comandos !adicionar, !remover etc.)
 # Formato: +5511999887766
-ADMIN_NUMERO="+5511999887766"
+ADMIN_NUMERO="${ADMIN_NUMERO:?Defina ADMIN_NUMERO no ambiente ou em .env}"
 
 # Horário de envio (UTC — BRT = UTC-3)
 # 10:00 UTC = 07:00 BRT
-HORARIO_UTC="cron(0 10 * * ? *)"
+HORARIO_UTC="${HORARIO_UTC:-cron(0 10 * * ? *)}"
 
 # Token de verificação do webhook Meta (crie qualquer string secreta)
 # Ex: fitbot-webhook-2024
-META_VERIFY_TOKEN="fitbot-webhook-2024"
+META_VERIFY_TOKEN="${META_VERIFY_TOKEN:?Defina META_VERIFY_TOKEN no ambiente ou em .env}"
 
 # Nome do template aprovado no Meta Business Manager
-TEMPLATE_NAME="fitbot_mensagem_diaria"
+TEMPLATE_NAME="${TEMPLATE_NAME:-fitbot_mensagem_diaria}"
 
 # ─── Credenciais da Meta WhatsApp API ────────────────────────────────────────
 # Obtidas em: https://developers.facebook.com → seu app → WhatsApp → API Setup
 
-META_TOKEN="EAAxxxxxxxxxxxxxxxxx"       # Token de acesso permanente
-META_PHONE_ID="1234567890"             # Phone Number ID
-META_APP_SECRET="xxxxxxxxxxxxxxxx"     # App Secret (Configurações do app)
+META_TOKEN="${META_TOKEN:?Defina META_TOKEN no ambiente ou em .env}"
+META_PHONE_ID="${META_PHONE_ID:?Defina META_PHONE_ID no ambiente ou em .env}"
+META_APP_SECRET="${META_APP_SECRET:?Defina META_APP_SECRET no ambiente ou em .env}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -41,21 +47,21 @@ echo ""
 echo "1/5 — Salvando credenciais no SSM Parameter Store..."
 
 aws ssm put-parameter \
-    --name "/fitbot/meta/token" \
+    --name "/motivafit/meta/token" \
     --value "$META_TOKEN" \
     --type "SecureString" \
     --overwrite \
     --region "$AWS_REGION"
 
 aws ssm put-parameter \
-    --name "/fitbot/meta/phone_id" \
+    --name "/motivafit/meta/phone_id" \
     --value "$META_PHONE_ID" \
     --type "SecureString" \
     --overwrite \
     --region "$AWS_REGION"
 
 aws ssm put-parameter \
-    --name "/fitbot/meta/app_secret" \
+    --name "/motivafit/meta/app_secret" \
     --value "$META_APP_SECRET" \
     --type "SecureString" \
     --overwrite \

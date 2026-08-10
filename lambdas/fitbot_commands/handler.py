@@ -11,6 +11,7 @@ from datetime import datetime
 
 import boto3
 import requests
+from boto3.dynamodb.conditions import Attr
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -174,16 +175,13 @@ def sair_lista(numero: str) -> tuple[bool, str]:
             ":ts": datetime.now().isoformat(),
         },
     )
-    return True, "Você foi removido da lista. Não receberá mais mensagens motivacionais.\n\nDeseja voltar? Envie: !adicionar {limpo}"
+    return True, f"Você foi removido da lista. Não receberá mais mensagens motivacionais.\n\nDeseja voltar? Envie: !adicionar {limpo}"
 
 
 def listar_numeros_texto() -> str:
     """Retorna string formatada com todos os números ativos."""
     tabela = dynamodb.Table(TABELA_NUMEROS)
-    resp = tabela.scan(
-        FilterExpression=boto3.dynamodb.conditions.Attr("ativo").eq(True)
-        & boto3.dynamodb.conditions.Attr("sk").eq("INFO")
-    )
+    resp = tabela.scan(FilterExpression=Attr("ativo").eq(True) & Attr("sk").eq("INFO"))
     items = resp.get("Items", [])
 
     if not items:
@@ -195,11 +193,7 @@ def listar_numeros_texto() -> str:
 
 def contar_numeros() -> int:
     tabela = dynamodb.Table(TABELA_NUMEROS)
-    resp = tabela.scan(
-        FilterExpression=boto3.dynamodb.conditions.Attr("ativo").eq(True)
-        & boto3.dynamodb.conditions.Attr("sk").eq("INFO"),
-        Select="COUNT",
-    )
+    resp = tabela.scan(FilterExpression=Attr("ativo").eq(True) & Attr("sk").eq("INFO"), Select="COUNT")
     return resp.get("Count", 0)
 
 

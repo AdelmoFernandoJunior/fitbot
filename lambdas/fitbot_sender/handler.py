@@ -23,7 +23,7 @@ ssm      = boto3.client("ssm",             region_name=os.environ["AWS_REGION"])
 TABELA_NUMEROS    = os.environ["DYNAMO_TABLE"]
 PARAM_META_TOKEN  = os.environ["PARAM_META_TOKEN"]   # SSM: /MotivaFit/meta/token
 PARAM_PHONE_ID    = os.environ["PARAM_META_PHONE_ID"] # SSM: /MotivaFit/meta/phone_id
-TEMPLATE_NAME     = os.environ["TEMPLATE_NAME"]       # Ex: MotivaFit_mensagem_diaria
+TEMPLATE_NAME     = os.environ["TEMPLATE_NAME"]       # Ex: fitbot_mensagem_diaria
 TEMPLATE_LANGUAGE = os.environ.get("TEMPLATE_LANGUAGE", "pt_BR")
 
 TEMAS = [

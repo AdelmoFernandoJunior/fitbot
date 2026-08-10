@@ -16,7 +16,7 @@ Parameters:
     Description: "Token criado por você para verificar o webhook da Meta (qualquer string)"
   TemplateName:
     Type: String
-    Default: "motivafit_mensagem_diaria"
+    Default: "fitbot_mensagem_diaria"
     Description: "Nome do template aprovado no Meta Business"
   TemplateLanguage:
     Type: String
@@ -66,7 +66,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: MotivaFit-sender
-      CodeUri: lambdas/MotivaFit_sender/
+      CodeUri: lambdas/fitbot_sender/
       Handler: handler.handler
       Description: Gera e envia mensagem motivacional diária via Meta WhatsApp API
       Policies:
@@ -94,7 +94,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: motivafit-commands
-      CodeUri: lambdas/motivafit_commands/
+      CodeUri: lambdas/fitbot_commands/
       Handler: handler.handler
       Description: Processa comandos WhatsApp (!adicionar, !remover, !lista)
       Environment:
