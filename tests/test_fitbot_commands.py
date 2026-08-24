@@ -155,6 +155,35 @@ class FitbotCommandsTests(unittest.TestCase):
         self.assertEqual(response["statusCode"], 401)
         self.assertEqual(len(self.lambda_client.calls), 0)
 
+    def test_handler_permite_opt_out_de_usuario_nao_admin(self):
+        event = {
+            "httpMethod": "POST",
+            "body": json.dumps(
+                {
+                    "entry": [
+                        {
+                            "changes": [
+                                {
+                                    "value": {
+                                        "messages": [
+                                            {"from": "5511888777666", "type": "text", "text": {"body": "sair"}}
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ),
+            "isBase64Encoded": False,
+        }
+        event["headers"] = self.assinatura(event)
+
+        response = self.module.handler(event, None)
+
+        self.assertEqual(response["statusCode"], 200)
+        self.assertIn("não está cadastrado", json.loads(response["body"])["message"])
+
     def test_handler_enviar_agora_invoca_sender_async(self):
         self.module.ADMIN_NUMERO = ""
         self.module.requests.post = lambda *args, **kwargs: MagicMock(ok=True, status_code=200, text="ok")

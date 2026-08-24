@@ -84,8 +84,14 @@ class FakeTable:
             item["removido_em"] = ExpressionAttributeValues[":ts"]
         return {"ResponseMetadata": {"HTTPStatusCode": 200}}
 
-    def scan(self, FilterExpression=None, Select=None):
-        self.scan_calls.append({"FilterExpression": FilterExpression, "Select": Select})
+    def scan(self, FilterExpression=None, Select=None, ExclusiveStartKey=None):
+        self.scan_calls.append(
+            {
+                "FilterExpression": FilterExpression,
+                "Select": Select,
+                "ExclusiveStartKey": ExclusiveStartKey,
+            }
+        )
         items = [item for item in self.items.values() if item.get("sk") == "INFO" and item.get("ativo")]
         if Select == "COUNT":
             return {"Count": len(items)}

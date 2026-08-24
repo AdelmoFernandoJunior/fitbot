@@ -8,6 +8,7 @@ import logging
 import os
 import random
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "vendor"))
@@ -87,10 +88,14 @@ Regras obrigatórias:
 def listar_numeros() -> list[dict]:
     """Retorna todos os destinatários ativos do DynamoDB."""
     tabela = dynamodb.Table(TABELA_NUMEROS)
-    resp = tabela.scan(
-        FilterExpression=Attr("ativo").eq(True) & Attr("sk").eq("INFO")
-    )
-    return resp.get("Items", [])
+    items = []
+    scan_kwargs = {"FilterExpression": Attr("ativo").eq(True) & Attr("sk").eq("INFO")}
+    while True:
+        resp = tabela.scan(**scan_kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            return items
+        scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
 
 def enviar_whatsapp(numero: str, mensagem: str, token: str, phone_id: str) -> bool:
@@ -121,7 +126,11 @@ def enviar_whatsapp(numero: str, mensagem: str, token: str, phone_id: str) -> bo
         },
     }
 
-    resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    except requests.RequestException:
+        logger.exception("Falha de rede ao enviar para %s", numero)
+        return False
 
     if resp.status_code == 200:
         return True
@@ -175,10 +184,16 @@ def handler(event, context):
         return {"statusCode": 200, "body": "Nenhum destinatário cadastrado."}
 
     # 5. Enviar para cada número
+    def enviar_item(item):
+        return enviar_whatsapp(item["numero"], mensagem, meta_token, phone_id)
+
     enviados = 0
-    for item in numeros:
+    max_workers = min(10, len(numeros))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        resultados = executor.map(enviar_item, numeros)
+
+    for item, sucesso in zip(numeros, resultados):
         numero = item["numero"]
-        sucesso = enviar_whatsapp(numero, mensagem, meta_token, phone_id)
         if sucesso:
             enviados += 1
             logger.info("Enviado para %s", numero)

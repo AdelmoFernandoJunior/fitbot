@@ -9,6 +9,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -41,6 +42,10 @@ def buscar_parametro_ssm(nome: str) -> str:
 
 def formatar_numero(num: str) -> str:
     return "+" + num.replace("+", "").replace(" ", "").replace("-", "")
+
+
+def numero_e_valido(numero: str) -> bool:
+    return bool(re.fullmatch(r"\+[1-9]\d{10,14}", numero))
 
 
 def responder_meta(mensagem: str, status_code: int = 200, content_type: str = "application/json") -> dict:
@@ -131,7 +136,11 @@ def enviar_meta_mensagem(numero: str, mensagem: str, token: str, phone_id: str) 
         "text": {"body": mensagem},
     }
 
-    resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    except requests.RequestException:
+        logger.exception("Falha de rede ao responder pelo WhatsApp para %s", numero)
+        return False
     if resp.ok:
         return True
 
@@ -142,7 +151,7 @@ def enviar_meta_mensagem(numero: str, mensagem: str, token: str, phone_id: str) 
 def adicionar_numero(numero: str) -> tuple[bool, str]:
     """Adiciona número ao DynamoDB. Retorna (sucesso, mensagem)."""
     limpo = "+" + numero.replace("+", "").replace(" ", "").replace("-", "")
-    if len(limpo) < 12:
+    if not numero_e_valido(limpo):
         return False, f"Número inválido: {numero}\nUse formato: +5511999887766"
 
     tabela = dynamodb.Table(TABELA_NUMEROS)
@@ -168,6 +177,8 @@ def adicionar_numero(numero: str) -> tuple[bool, str]:
 def remover_numero(numero: str) -> tuple[bool, str]:
     """Remove número do DynamoDB (soft delete)."""
     limpo = "+" + numero.replace("+", "").replace(" ", "").replace("-", "")
+    if not numero_e_valido(limpo):
+        return False, f"Número inválido: {numero}\nUse formato: +5511999887766"
     tabela = dynamodb.Table(TABELA_NUMEROS)
     existente = tabela.get_item(Key={"pk": f"NUMERO#{limpo}", "sk": "INFO"})
 
@@ -209,8 +220,14 @@ def sair_lista(numero: str) -> tuple[bool, str]:
 def listar_numeros_texto() -> str:
     """Retorna string formatada com todos os números ativos."""
     tabela = dynamodb.Table(TABELA_NUMEROS)
-    resp = tabela.scan(FilterExpression=Attr("ativo").eq(True) & Attr("sk").eq("INFO"))
-    items = resp.get("Items", [])
+    items = []
+    scan_kwargs = {"FilterExpression": Attr("ativo").eq(True) & Attr("sk").eq("INFO")}
+    while True:
+        resp = tabela.scan(**scan_kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            break
+        scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
     if not items:
         return "Nenhum número cadastrado.\nUse: !adicionar +5511999887766"
@@ -221,8 +238,17 @@ def listar_numeros_texto() -> str:
 
 def contar_numeros() -> int:
     tabela = dynamodb.Table(TABELA_NUMEROS)
-    resp = tabela.scan(FilterExpression=Attr("ativo").eq(True) & Attr("sk").eq("INFO"), Select="COUNT")
-    return resp.get("Count", 0)
+    total = 0
+    scan_kwargs = {
+        "FilterExpression": Attr("ativo").eq(True) & Attr("sk").eq("INFO"),
+        "Select": "COUNT",
+    }
+    while True:
+        resp = tabela.scan(**scan_kwargs)
+        total += resp.get("Count", 0)
+        if "LastEvaluatedKey" not in resp:
+            return total
+        scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
 
 def disparar_envio_manual() -> str:
@@ -281,14 +307,20 @@ def handler(event, context):
         logger.warning("Webhook Meta recebido sem mensagem válida.")
         return responder_meta("Evento recebido.")
 
+    if not mensagem_evento.get("from"):
+        logger.warning("Webhook Meta recebido sem remetente.")
+        return responder_meta("Evento inválido.", status_code=400)
+
     remetente = formatar_numero(mensagem_evento["from"])
     texto = mensagem_evento["text"].strip()
+    texto_lower = texto.lower().strip()
 
     logger.info("Mensagem de %s: %s", remetente, texto)
 
     if ADMIN_NUMERO:
         admin_limpo = formatar_numero(ADMIN_NUMERO)
-        if remetente != admin_limpo:
+        comandos_opt_out = ("sair", "não quero receber mensagens", "nao quero receber mensagens")
+        if remetente != admin_limpo and texto_lower not in comandos_opt_out:
             logger.warning("Acesso negado para %s", remetente)
             meta_token = buscar_parametro_ssm(PARAM_META_TOKEN)
             phone_id = buscar_parametro_ssm(PARAM_META_PHONE_ID)
@@ -299,8 +331,6 @@ def handler(event, context):
         return responder_meta("Mensagem vazia ou tipo não suportado.")
 
     # Processa comandos e mensagens de parada
-    texto_lower = texto.lower().strip()
-
     if texto_lower in ("sair", "não quero receber mensagens", "nao quero receber mensagens"):
         ok, msg = sair_lista(remetente)
     elif texto_lower.startswith("!adicionar "):
