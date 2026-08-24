@@ -109,7 +109,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: /motivafit/meta/phone_id
         - SSMParameterReadPolicy:
-          ParameterName: /motivafit/meta/app_secret
+            ParameterName: /motivafit/meta/app_secret
         - LambdaInvokePolicy:
             FunctionName: !Ref MotivaFitSender
       Events:
