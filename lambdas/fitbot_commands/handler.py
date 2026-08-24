@@ -4,10 +4,15 @@ Processa comandos enviados pelo WhatsApp: !adicionar, !remover, !lista, !enviar 
 """
 
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
+import sys
 from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "vendor"))
 
 import boto3
 import requests
@@ -23,6 +28,7 @@ lambda_client = boto3.client("lambda", region_name=os.environ["AWS_REGION"])
 TABELA_NUMEROS = os.environ["DYNAMO_TABLE"] # DynamoDB para números e histórico
 PARAM_META_TOKEN = os.environ["PARAM_META_TOKEN"]  # SSM: /MotivaFit/meta/token
 PARAM_META_PHONE_ID = os.environ["PARAM_META_PHONE_ID"] # SSM: /MotivaFit/meta/phone_id
+PARAM_META_APP_SECRET = os.environ["PARAM_META_APP_SECRET"] # SSM: /motivafit/meta/app_secret
 META_VERIFY_TOKEN = os.environ["META_VERIFY_TOKEN"] # Token de verificação do webhook (ex: MotivaFit-webhook-2024)
 ADMIN_NUMERO = os.environ.get("ADMIN_NUMERO", "")  # Ex: +5511999887766
 SENDER_LAMBDA = os.environ["SENDER_LAMBDA_NAME"]  # Ex: MotivaFit-sender
@@ -57,10 +63,32 @@ def verificar_webhook(event) -> dict:
     return {"statusCode": 403, "headers": {"Content-Type": "text/plain"}, "body": "Forbidden"}
 
 
-def extrair_mensagem(event) -> dict | None:
+def corpo_requisicao(event) -> bytes:
     body_raw = event.get("body", "")
     if event.get("isBase64Encoded"):
-        body_raw = base64.b64decode(body_raw).decode("utf-8")
+        return base64.b64decode(body_raw, validate=True)
+    if isinstance(body_raw, bytes):
+        return body_raw
+    return body_raw.encode("utf-8")
+
+
+def verificar_assinatura_meta(event, app_secret: str) -> bool:
+    headers = event.get("headers") or {}
+    assinatura = next(
+        (value for key, value in headers.items() if key.lower() == "x-hub-signature-256"),
+        "",
+    )
+    if not assinatura.startswith("sha256="):
+        return False
+
+    esperado = hmac.new(
+        app_secret.encode("utf-8"), corpo_requisicao(event), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(assinatura.removeprefix("sha256="), esperado)
+
+
+def extrair_mensagem(event) -> dict | None:
+    body_raw = corpo_requisicao(event).decode("utf-8")
 
     if isinstance(body_raw, str):
         try:
@@ -237,6 +265,16 @@ def handler(event, context):
     method = event.get("httpMethod", "POST").upper()
     if method == "GET":
         return verificar_webhook(event)
+
+    try:
+        app_secret = buscar_parametro_ssm(PARAM_META_APP_SECRET)
+    except Exception:
+        logger.exception("Não foi possível buscar o segredo de assinatura do webhook.")
+        return responder_meta("Não autorizado.", status_code=401)
+
+    if not verificar_assinatura_meta(event, app_secret):
+        logger.warning("Webhook Meta rejeitado por assinatura inválida.")
+        return responder_meta("Não autorizado.", status_code=401)
 
     mensagem_evento = extrair_mensagem(event)
     if not mensagem_evento:

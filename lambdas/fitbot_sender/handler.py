@@ -7,7 +7,10 @@ import json
 import logging
 import os
 import random
+import sys
 from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "vendor"))
 
 import boto3
 import requests

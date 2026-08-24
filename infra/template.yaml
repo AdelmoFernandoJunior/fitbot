@@ -100,6 +100,7 @@ Resources:
       Environment:
         Variables:
           SENDER_LAMBDA_NAME: !Ref MotivaFitSender
+          PARAM_META_APP_SECRET: /motivafit/meta/app_secret
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TabelaMotivaFit
@@ -107,6 +108,8 @@ Resources:
             ParameterName: /motivafit/meta/token
         - SSMParameterReadPolicy:
             ParameterName: /motivafit/meta/phone_id
+        - SSMParameterReadPolicy:
+          ParameterName: /motivafit/meta/app_secret
         - LambdaInvokePolicy:
             FunctionName: !Ref MotivaFitSender
       Events:

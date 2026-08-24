@@ -135,6 +135,7 @@ def default_env() -> dict[str, str]:
         "DYNAMO_TABLE": "motivafit-dados",
         "PARAM_META_TOKEN": "/motivafit/meta/token",
         "PARAM_META_PHONE_ID": "/motivafit/meta/phone_id",
+        "PARAM_META_APP_SECRET": "/motivafit/meta/app_secret",
         "META_VERIFY_TOKEN": "verify-token",
         "ADMIN_NUMERO": "+5511999887766",
         "SENDER_LAMBDA_NAME": "MotivaFit-sender",

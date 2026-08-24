@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import unittest
 from unittest.mock import MagicMock
@@ -15,6 +17,7 @@ class FitbotCommandsTests(unittest.TestCase):
             {
                 "/motivafit/meta/token": "token-123",
                 "/motivafit/meta/phone_id": "phone-123",
+                "/motivafit/meta/app_secret": "app-secret-123",
             }
         )
         self.lambda_client = FakeLambdaClient()
@@ -97,6 +100,7 @@ class FitbotCommandsTests(unittest.TestCase):
             ),
             "isBase64Encoded": False,
         }
+        event["headers"] = self.assinatura(event)
 
         response = self.module.handler(event, None)
 
@@ -130,13 +134,26 @@ class FitbotCommandsTests(unittest.TestCase):
             ),
             "isBase64Encoded": False,
         }
+        event["headers"] = self.assinatura(event)
 
         response = self.module.handler(event, None)
 
         self.assertEqual(response["statusCode"], 200)
         self.assertEqual(len(self.lambda_client.calls), 0)
-        self.assertEqual(len(self.ssm.calls), 2)
-        self.assertEqual(self.ssm.calls[0]["Name"], "/motivafit/meta/token")
+        self.assertEqual(len(self.ssm.calls), 3)
+        self.assertEqual(self.ssm.calls[0]["Name"], "/motivafit/meta/app_secret")
+
+    def test_handler_rejeita_post_sem_assinatura(self):
+        event = {
+            "httpMethod": "POST",
+            "body": json.dumps({"entry": []}),
+            "isBase64Encoded": False,
+        }
+
+        response = self.module.handler(event, None)
+
+        self.assertEqual(response["statusCode"], 401)
+        self.assertEqual(len(self.lambda_client.calls), 0)
 
     def test_handler_enviar_agora_invoca_sender_async(self):
         self.module.ADMIN_NUMERO = ""
@@ -163,12 +180,18 @@ class FitbotCommandsTests(unittest.TestCase):
             ),
             "isBase64Encoded": False,
         }
+        event["headers"] = self.assinatura(event)
 
         response = self.module.handler(event, None)
 
         self.assertEqual(response["statusCode"], 200)
         self.assertEqual(len(self.lambda_client.calls), 1)
         self.assertEqual(self.lambda_client.calls[0]["FunctionName"], "MotivaFit-sender")
+
+    def assinatura(self, event):
+        corpo = event["body"].encode("utf-8")
+        digest = hmac.new(b"app-secret-123", corpo, hashlib.sha256).hexdigest()
+        return {"X-Hub-Signature-256": f"sha256={digest}"}
 
 
 if __name__ == "__main__":
