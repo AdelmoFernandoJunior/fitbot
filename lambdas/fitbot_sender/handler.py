@@ -10,6 +10,7 @@ import random
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from uuid import uuid4
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "vendor"))
 
@@ -141,14 +142,15 @@ def enviar_whatsapp(numero: str, mensagem: str, token: str, phone_id: str) -> bo
 
 def registrar_historico(mensagem: str, enviados: int, total: int):
     """Grava o envio no DynamoDB para histórico."""
+    agora = datetime.now()
     tabela = dynamodb.Table(TABELA_NUMEROS)
     tabela.put_item(Item={
-        "pk": f"HISTORICO#{datetime.now().strftime('%Y-%m-%d')}",
-        "sk": "ENVIO",
+        "pk": f"HISTORICO#{agora.strftime('%Y-%m-%d')}",
+        "sk": f"ENVIO#{agora.isoformat()}#{uuid4().hex}",
         "mensagem": mensagem,
         "enviados": enviados,
         "total": total,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": agora.isoformat(),
     })
 
 

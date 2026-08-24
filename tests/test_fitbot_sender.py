@@ -76,7 +76,15 @@ class FitbotSenderTests(unittest.TestCase):
         self.assertEqual(self.ssm.calls[0]["Name"], "/motivafit/meta/token")
         self.assertEqual(len(post_calls), 1)
         history_table = self.dynamo.Table("motivafit-dados")
-        self.assertTrue(any(key[0].startswith("HISTORICO#") and key[1] == "ENVIO" for key in history_table.items))
+        self.assertTrue(any(key[0].startswith("HISTORICO#") and key[1].startswith("ENVIO#") for key in history_table.items))
+
+    def test_registrar_historico_nao_sobrescreve_execucoes(self):
+        self.module.registrar_historico("Mensagem 1", 1, 1)
+        self.module.registrar_historico("Mensagem 2", 1, 1)
+
+        history_table = self.dynamo.Table("motivafit-dados")
+        historicos = [key for key in history_table.items if key[0].startswith("HISTORICO#")]
+        self.assertEqual(len(historicos), 2)
 
     def test_handler_sem_destinatarios_retorna_sem_enviar(self):
         empty_dynamo = FakeDynamoResource()
